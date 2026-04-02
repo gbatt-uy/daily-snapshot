@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Daily Snapshot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #0e0e0e;
+      --surface: #161616;
+      --surface2: #1e1e1e;
+      --border: #2a2a2a;
+      --text: #f0ece4;
+      --text-muted: #6b6760;
+      --text-soft: #a09c96;
+      --accent: #c9a96e;
+      --accent-dim: #c9a96e22;
+      --success: #6ea87e;
+      --danger: #c96e6e;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 48px 24px 80px;
+    }
+
+    /* Grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.6;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 560px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Header */
+    header {
+      margin-bottom: 48px;
+      opacity: 0;
+      animation: fadeUp 0.6s ease forwards;
+    }
+
+    .greeting {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+      font-weight: 400;
+      color: var(--text);
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+
+    .greeting em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    .date-line {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 300;
+    }
+
+    /* Already done state */
+    .done-state {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px;
+      opacity: 0;
+      animation: fadeUp 0.5s ease forwards 0.2s;
+    }
+
+    .done-state.visible { display: block; }
+
+    .done-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--success);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .done-label::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      display: inline-block;
+    }
+
+    .done-entry {
+      margin-bottom: 20px;
+    }
+
+    .done-entry:last-child { margin-bottom: 0; }
+
+    .done-q {
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .done-a {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.05rem;
+      color: var(--text-soft);
+      line-height: 1.5;
+    }
+
+    .done-a.empty {
+      font-style: italic;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .add-reflection-btn {
+      margin-top: 28px;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-soft);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .add-reflection-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Form */
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px;
+      opacity: 0;
+      animation: fadeUp 0.5s ease forwards 0.2s;
+    }
+
+    .question-block {
+      margin-bottom: 32px;
+    }
+
+    .question-block:last-of-type {
+      margin-bottom: 0;
+    }
+
+    label {
+      display: block;
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+
+    textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: 'Playfair Display', serif;
+      font-size: 1rem;
+      line-height: 1.6;
+      padding: 14px 16px;
+      resize: none;
+      min-height: 90px;
+      transition: border-color 0.2s, background 0.2s;
+      outline: none;
+    }
+
+    textarea::placeholder {
+      color: var(--text-muted);
+      font-style: italic;
+      font-size: 0.92rem;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      background: #1a1a1a;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 28px 0;
+    }
+
+    .optional-tag {
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    /* Submit */
+    .submit-row {
+      margin-top: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .submit-btn {
+      background: var(--accent);
+      color: #0e0e0e;
+      border: none;
+      border-radius: 10px;
+      padding: 13px 28px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      letter-spacing: 0.02em;
+    }
+
+    .submit-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+    .submit-btn:active { transform: translateY(0); }
+    .submit-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .status-msg {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      flex: 1;
+      text-align: right;
+    }
+
+    .status-msg.error { color: var(--danger); }
+    .status-msg.success { color: var(--success); }
+
+    /* History */
+    .history-section {
+      margin-top: 48px;
+      opacity: 0;
+      animation: fadeUp 0.5s ease forwards 0.4s;
+    }
+
+    .section-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    .history-empty {
+      color: var(--text-muted);
+      font-style: italic;
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 32px 0;
+    }
+
+    .history-item {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 12px;
+      background: var(--surface);
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .history-item:hover { border-color: #3a3a3a; }
+
+    .history-date {
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .history-preview {
+      font-family: 'Playfair Display', serif;
+      font-size: 0.95rem;
+      color: var(--text-soft);
+      line-height: 1.4;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .history-detail {
+      display: none;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .history-detail.open { display: block; }
+
+    .history-detail-item {
+      margin-bottom: 14px;
+    }
+
+    .history-detail-item:last-child { margin-bottom: 0; }
+
+    .history-q {
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .history-a {
+      font-family: 'Playfair Display', serif;
+      font-size: 0.92rem;
+      color: var(--text-soft);
+      line-height: 1.5;
+    }
+
+    .history-a.empty {
+      font-style: italic;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    /* Success overlay */
+    .success-overlay {
+      position: fixed;
+      inset: 0;
+      background: #0e0e0eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s;
+    }
+
+    .success-overlay.show {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .success-icon {
+      font-size: 3rem;
+      margin-bottom: 20px;
+      animation: popIn 0.4s ease;
+    }
+
+    .success-text {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.5rem;
+      color: var(--text);
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .success-sub {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.6); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    /* Loading */
+    .loading {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      padding: 60px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="greeting" id="greeting">Hola, <em>Gon</em>.</div>
+      <div class="date-line" id="date-line"></div>
+    </header>
+
+    <div id="main-content">
+      <div class="loading">Cargando...</div>
+    </div>
+
+    <div class="history-section" id="history-section" style="display:none">
+      <div class="section-label">Entradas anteriores</div>
+      <div id="history-list"></div>
+    </div>
+  </div>
+
+  <!-- Success overlay -->
+  <div class="success-overlay" id="success-overlay">
+    <div class="success-icon">✦</div>
+    <div class="success-text" id="success-text">Guardado.</div>
+    <div class="success-sub" id="success-sub">Eso es todo por hoy.</div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://lzqjwlnxaoxqgwhwatyt.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_il3R7-iHTZqlQ52ZqHflZg_JE-VWqrE';
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // Greeting by time
+    function getGreeting() {
+      const h = new Date().getHours();
+      if (h < 12) return 'Buenos días,';
+      if (h < 19) return 'Buenas tardes,';
+      return 'Buenas noches,';
+    }
+
+    // Format date
+    function formatDate(dateStr) {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('es-UY', { weekday: 'long', day: 'numeric', month: 'long' });
+    }
+
+    function todayStr() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    function isToday(dateStr) {
+      return dateStr.split('T')[0] === todayStr();
+    }
+
+    // Render greeting
+    document.getElementById('greeting').innerHTML = `${getGreeting()} <em>Gon</em>.`;
+    document.getElementById('date-line').textContent = new Date().toLocaleDateString('es-UY', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    }).toUpperCase();
+
+    // Success messages
+    const successMessages = [
+      { text: 'Guardado.', sub: 'Eso es todo por hoy.' },
+      { text: 'Listo.', sub: 'Mañana es otro día.' },
+      { text: 'Bien.', sub: 'Cada día cuenta.' },
+      { text: 'Guardado.', sub: 'Ya hiciste lo importante.' },
+    ];
+
+    function showSuccess(isReflection = false) {
+      const overlay = document.getElementById('success-overlay');
+      const msg = isReflection
+        ? { text: 'Reflexión guardada.', sub: 'Cerrá el día con calma.' }
+        : successMessages[Math.floor(Math.random() * successMessages.length)];
+      document.getElementById('success-text').textContent = msg.text;
+      document.getElementById('success-sub').textContent = msg.sub;
+      overlay.classList.add('show');
+      setTimeout(() => {
+        overlay.classList.remove('show');
+        init();
+      }, 2200);
+    }
+
+    // Render the form (new entry)
+    function renderForm() {
+      document.getElementById('main-content').innerHTML = `
+        <div class="form-card">
+          <div class="question-block">
+            <label>Tu prioridad número 1 hoy</label>
+            <textarea id="priority" placeholder="Una sola cosa. La que más importa." rows="3"></textarea>
+          </div>
+          <div class="divider"></div>
+          <div class="question-block">
+            <label>Qué querés evitar o no repetir</label>
+            <textarea id="avoid" placeholder="Algo que te frenó, te distrajo, o no querés repetir." rows="3"></textarea>
+          </div>
+          <div class="divider"></div>
+          <div class="question-block">
+            <label>Cómo terminó el día <span class="optional-tag">opcional</span></label>
+            <textarea id="reflection" placeholder="Completalo a la noche. Sin presión." rows="3"></textarea>
+          </div>
+          <div class="submit-row">
+            <button class="submit-btn" id="submit-btn" onclick="submitEntry()">Guardar entrada</button>
+            <span class="status-msg" id="status-msg"></span>
+          </div>
+        </div>
+      `;
+    }
+
+    // Render already-done state
+    function renderDone(entry) {
+      const hasReflection = entry.reflection && entry.reflection.trim() !== '';
+      document.getElementById('main-content').innerHTML = `
+        <div class="done-state visible">
+          <div class="done-label">Entrada de hoy completada</div>
+          <div class="done-entry">
+            <div class="done-q">Prioridad número 1</div>
+            <div class="done-a">${entry.priority || '<em class="empty">Sin registrar</em>'}</div>
+          </div>
+          <div class="done-entry">
+            <div class="done-q">Qué evitar</div>
+            <div class="done-a">${entry.avoid || '<em class="empty">Sin registrar</em>'}</div>
+          </div>
+          <div class="done-entry">
+            <div class="done-q">Reflexión del día</div>
+            <div class="done-a ${hasReflection ? '' : 'empty'}">${hasReflection ? entry.reflection : 'Todavía no completaste la reflexión.'}</div>
+          </div>
+          ${!hasReflection ? `<button class="add-reflection-btn" onclick="showReflectionForm(${entry.id})">Agregar reflexión del día →</button>` : ''}
+        </div>
+      `;
+    }
+
+    // Reflection-only form
+    function showReflectionForm(entryId) {
+      const card = document.querySelector('.done-state');
+      card.innerHTML += `
+        <div class="divider" style="margin-top:24px"></div>
+        <div class="question-block" style="margin-top:24px">
+          <label>¿Cómo terminó el día?</label>
+          <textarea id="reflection-only" placeholder="Tomá un momento. ¿Cómo fue?" rows="3"></textarea>
+        </div>
+        <div class="submit-row">
+          <button class="submit-btn" onclick="submitReflection(${entryId})">Guardar</button>
+          <span class="status-msg" id="status-msg"></span>
+        </div>
+      `;
+      document.querySelector('.add-reflection-btn')?.remove();
+    }
+
+    async function submitReflection(entryId) {
+      const reflection = document.getElementById('reflection-only')?.value?.trim();
+      if (!reflection) return;
+      const btn = document.querySelector('.submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+      const { error } = await db.from('entries').update({ reflection }).eq('id', entryId);
+      if (error) {
+        document.getElementById('status-msg').textContent = 'Error al guardar.';
+        document.getElementById('status-msg').className = 'status-msg error';
+        btn.disabled = false;
+        btn.textContent = 'Guardar';
+        return;
+      }
+      showSuccess(true);
+    }
+
+    // Render history
+    function renderHistory(entries) {
+      const section = document.getElementById('history-section');
+      const list = document.getElementById('history-list');
+      const past = entries.filter(e => !isToday(e.created_at));
+      if (past.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+      section.style.display = 'block';
+      list.innerHTML = past.map(e => `
+        <div class="history-item" onclick="toggleHistory(this)">
+          <div class="history-date">${formatDate(e.created_at)}</div>
+          <div class="history-preview">${e.priority || 'Sin prioridad registrada'}</div>
+          <div class="history-detail">
+            <div class="history-detail-item">
+              <div class="history-q">Prioridad</div>
+              <div class="history-a ${e.priority ? '' : 'empty'}">${e.priority || 'Sin registrar'}</div>
+            </div>
+            <div class="history-detail-item">
+              <div class="history-q">Qué evitar</div>
+              <div class="history-a ${e.avoid ? '' : 'empty'}">${e.avoid || 'Sin registrar'}</div>
+            </div>
+            <div class="history-detail-item">
+              <div class="history-q">Reflexión</div>
+              <div class="history-a ${e.reflection ? '' : 'empty'}">${e.reflection || 'Sin registrar'}</div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function toggleHistory(el) {
+      el.querySelector('.history-detail').classList.toggle('open');
+    }
+
+    // Submit entry
+    async function submitEntry() {
+      const priority = document.getElementById('priority')?.value?.trim();
+      const avoid = document.getElementById('avoid')?.value?.trim();
+      const reflection = document.getElementById('reflection')?.value?.trim();
+      const btn = document.getElementById('submit-btn');
+      const status = document.getElementById('status-msg');
+
+      if (!priority && !avoid) {
+        status.textContent = 'Escribí al menos tu prioridad del día.';
+        status.className = 'status-msg error';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+      status.textContent = '';
+
+      const { error } = await db.from('entries').insert([{ priority, avoid, reflection }]);
+
+      if (error) {
+        status.textContent = 'Error al guardar. Intentá de nuevo.';
+        status.className = 'status-msg error';
+        btn.disabled = false;
+        btn.textContent = 'Guardar entrada';
+        return;
+      }
+
+      showSuccess();
+    }
+
+    // Init
+    async function init() {
+      const { data, error } = await db
+        .from('entries')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (error) {
+        document.getElementById('main-content').innerHTML = `<div class="loading">Error al cargar. Revisá tu conexión.</div>`;
+        return;
+      }
+
+      const todayEntry = data?.find(e => isToday(e.created_at));
+
+      if (todayEntry) {
+        renderDone(todayEntry);
+      } else {
+        renderForm();
+      }
+
+      renderHistory(data || []);
+    }
+
+    init();
+  </script>
+</body>
+</html>
